@@ -39,6 +39,10 @@ class LlmService {
   ModelDownloader get downloader => _downloader;
 
   Future<void> init() async {
+    // Already loaded — never re-download or reload the model. Restarting the
+    // listening service must not touch this.
+    if (modelReady.value) return;
+
     final plan = await _downloader.plan();
     final path = await _models.path(plan.file);
 

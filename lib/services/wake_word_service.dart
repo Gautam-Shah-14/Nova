@@ -12,6 +12,7 @@ import '../models/nova_status.dart';
 import '../models/wake_event.dart';
 import '../utils/logger.dart';
 import 'native_bridge.dart';
+import 'tts_service.dart';
 
 /// Wake phrase + command capture via Android's `SpeechRecognizer`
 /// (`speech_to_text`). Uses on-device recognition automatically on phones with
@@ -19,15 +20,22 @@ import 'native_bridge.dart';
 /// otherwise. The native foreground service just keeps the process (and its
 /// mic-typed FGS) alive; this class runs the listen loop.
 ///
-/// Flow: final result -> contains a wake alias? -> chime, then either the
-/// words after the alias are the command, or the next utterance is -> emit a
-/// [WakeEvent]. Recognition is suspended while Nova is `working` so it doesn't
-/// transcribe its own TTS.
+/// Flow: final result -> contains a wake alias? -> speak the acknowledgement,
+/// then either the words after the alias are the command, or the next
+/// utterance is -> emit a [WakeEvent]. Recognition is suspended while Nova is
+/// `working` (or speaking) so it doesn't transcribe its own TTS.
+///
+/// `SpeechRecognizer` sessions are short-lived and end on their own — a
+/// [_watchdog] timer force-restarts listening if it ever finds the recognizer
+/// idle while Nova should be armed, so a missed relisten (a dropped
+/// callback, a status transition that didn't fire [_resume]) can't leave
+/// Nova silently deaf until the app is manually restarted.
 class WakeWordService {
-  WakeWordService({required this.status, NativeBridge? bridge})
+  WakeWordService({required this.status, required this.tts, NativeBridge? bridge})
       : _bridge = bridge ?? NativeBridge.instance;
 
   final StatusController status;
+  final TtsService tts;
   final NativeBridge _bridge;
   final SpeechToText _speech = SpeechToText();
 
@@ -35,10 +43,12 @@ class WakeWordService {
   Stream<WakeEvent> get onWake => _hits.stream;
 
   Worker? _statusWorker;
+  Timer? _watchdog;
   bool _available = false;
   bool _running = false;
   bool _paused = false;
   bool _expectingCommand = false;
+  bool _acknowledging = false;
   Timer? _relisten;
   Timer? _commandTimeout;
 
@@ -78,6 +88,13 @@ class WakeWordService {
       }
     });
 
+    _watchdog = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (_running && !_paused && !_acknowledging && !_speech.isListening) {
+        log.w('watchdog: recognizer was idle — restarting');
+        _listen();
+      }
+    });
+
     _listen();
     log.i('WakeWordService armed — say "${NovaConfig.wakePhrase}"');
   }
@@ -86,6 +103,8 @@ class WakeWordService {
     _running = false;
     _relisten?.cancel();
     _commandTimeout?.cancel();
+    _watchdog?.cancel();
+    _watchdog = null;
     _statusWorker?.dispose();
     _statusWorker = null;
     try {
@@ -107,7 +126,7 @@ class WakeWordService {
 
   // ── listen loop ────────────────────────────────────────────────────────
   void _listen() {
-    if (!_running || _paused) return;
+    if (!_running || _paused || _acknowledging) return;
     if (_speech.isListening) return;
     _speech
         .listen(
@@ -121,7 +140,10 @@ class WakeWordService {
             localeId: 'en_US',
           ),
         )
-        .catchError((Object e) => log.w('listen() threw: $e'));
+        .catchError((Object e) {
+      log.w('listen() threw: $e');
+      _scheduleRelisten(const Duration(milliseconds: 800));
+    });
   }
 
   void _scheduleRelisten([Duration delay = const Duration(milliseconds: 400)]) {
@@ -130,14 +152,19 @@ class WakeWordService {
   }
 
   void _onStatus(String s) {
-    if ((s == 'done' || s == 'notListening') && _running && !_paused) {
+    if ((s == 'done' || s == 'notListening') &&
+        _running &&
+        !_paused &&
+        !_acknowledging) {
       _scheduleRelisten();
     }
   }
 
   void _onError(SpeechRecognitionError e) {
     // no_match / speech_timeout are normal in a wake loop — just go again.
-    if (_running && !_paused) _scheduleRelisten(const Duration(milliseconds: 600));
+    if (_running && !_paused && !_acknowledging) {
+      _scheduleRelisten(const Duration(milliseconds: 600));
+    }
   }
 
   void _onResult(SpeechRecognitionResult r) {
@@ -160,20 +187,41 @@ class WakeWordService {
     for (final alias in NovaConfig.wakeAliases) {
       final idx = lower.indexOf(alias);
       if (idx < 0) continue;
-      _chime();
-      final tail = text.substring(idx + alias.length).trim();
-      final cleaned = tail.replaceFirst(RegExp(r'^[,.!?\s]+'), '');
-      if (cleaned.isNotEmpty) {
-        _emit(cleaned);
-      } else {
-        _expectingCommand = true;
-        _armCommandTimeout();
-        _scheduleRelisten(const Duration(milliseconds: 150));
-      }
+      final tail = text
+          .substring(idx + alias.length)
+          .replaceFirst(RegExp(r'^[,.!?\s]+'), '')
+          .trim();
+      unawaited(_onWakeDetected(tail));
       return;
     }
     // heard speech, no wake word — keep listening
     _scheduleRelisten();
+  }
+
+  /// Wake word confirmed: acknowledge out loud (mic paused while it speaks so
+  /// it doesn't hear itself), then capture the command.
+  Future<void> _onWakeDetected(String tail) async {
+    HapticFeedback.mediumImpact();
+    _acknowledging = true;
+    _relisten?.cancel();
+    try {
+      _speech.cancel();
+    } catch (_) {}
+
+    try {
+      await tts.speak(NovaConfig.wakeAcknowledgement);
+    } catch (e) {
+      log.w('wake acknowledgement failed: $e');
+    }
+    _acknowledging = false;
+
+    if (tail.isNotEmpty) {
+      _emit(tail);
+    } else {
+      _expectingCommand = true;
+      _armCommandTimeout();
+      _scheduleRelisten(const Duration(milliseconds: 150));
+    }
   }
 
   void _emit(String command) {
@@ -189,11 +237,6 @@ class WakeWordService {
         log.i('no command after wake — back to idle');
       }
     });
-  }
-
-  void _chime() {
-    HapticFeedback.mediumImpact();
-    SystemSound.play(SystemSoundType.click);
   }
 
   void _suspend() {

@@ -29,7 +29,7 @@ void installDependencies() {
 
   final status = Get.put(StatusController(), permanent: true);
   final wakeWord = Get.put(
-    WakeWordService(status: status),
+    WakeWordService(status: status, tts: tts),
     permanent: true,
   );
   final queue = Get.put(

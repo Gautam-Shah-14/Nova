@@ -117,6 +117,17 @@ class ServiceController extends GetxController {
   /// Debug: next spoken utterance is treated as a command, no wake word needed.
   Future<void> simulateWake() => wakeWord.simulate();
 
+  /// Restarts the wake-word listener (foreground service + recognizer) only.
+  /// Deliberately does NOT touch [LlmService] — the AI model, once downloaded
+  /// and loaded, must never be reloaded or re-fetched by this.
+  Future<String?> restartListening() async {
+    log.i('restarting listening service');
+    await wakeWord.stop();
+    listening.value = false;
+    speechRecognitionReady.value = false;
+    return enableListening();
+  }
+
   /// Notification action buttons route here via a native `control` event.
   Future<void> _handleControl(String? cmd) async {
     switch (cmd) {

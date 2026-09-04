@@ -60,6 +60,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _snack(err ?? 'Listening. Say "Nova, open contacts".');
   }
 
+  /// Restarts only the listening service (foreground service + recognizer) —
+  /// never touches the AI model, so a downloaded/loaded LLM stays put.
+  Future<void> _restartListening() async {
+    setState(() => _startingListen = true);
+    final err = await _service.restartListening();
+    if (!mounted) return;
+    setState(() => _startingListen = false);
+    _snack(err ?? 'Listening restarted.');
+  }
+
   void _run([String? preset]) {
     final text = preset ?? _cmd.text;
     if (text.trim().isEmpty) return;
@@ -88,24 +98,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _downloadCard(),
           const SizedBox(height: 16),
 
-          Obx(() => FilledButton.icon(
-                onPressed: _startingListen || _service.listening.value
-                    ? null
-                    : _startListening,
-                icon: _startingListen
-                    ? const SizedBox(
-                        width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Icon(_service.listening.value ? Icons.hearing : Icons.hearing_disabled),
-                label: Text(_startingListen
-                    ? 'Starting…'
-                    : _service.listening.value
-                        ? 'Listening'
-                        : 'Start listening'),
-              )),
+          Row(
+            children: [
+              Expanded(
+                child: Obx(() => FilledButton.icon(
+                      onPressed: _startingListen || _service.listening.value
+                          ? null
+                          : _startListening,
+                      icon: _startingListen
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : Icon(_service.listening.value
+                              ? Icons.hearing
+                              : Icons.hearing_disabled),
+                      label: Text(_startingListen
+                          ? 'Starting…'
+                          : _service.listening.value
+                              ? 'Listening'
+                              : 'Start listening'),
+                    )),
+              ),
+              const SizedBox(width: 10),
+              IconButton.filledTonal(
+                onPressed: _startingListen ? null : _restartListening,
+                tooltip: 'Restart listening (keeps the AI model — no re-download)',
+                icon: const Icon(Icons.restart_alt),
+              ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
-            'Say "Nova, <command>" once this is on. Restart it here if the OS '
-            'ever reclaims the mic.',
+            'Say "Nova, <command>" once this is on. If it ever stops hearing '
+            'you, tap ↻ to restart it — the AI model stays loaded, it\'s never '
+            're-downloaded.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),

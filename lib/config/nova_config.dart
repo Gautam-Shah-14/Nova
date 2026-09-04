@@ -51,6 +51,10 @@ class NovaConfig {
     'nova', 'no va', 'nldova', 'tony', 'toni', 'sony', 'jarvis',
   ];
 
+  /// Spoken the moment the wake word is heard, before Nova processes the
+  /// command — confirms it's listening, Stark-style.
+  static const String wakeAcknowledgement = 'I am Iron Man.';
+
   /// Cap on pending tasks. Past this, Nova says "hold on, catching up" instead
   /// of silently dropping a command. See [NovaConfig] usage in the queue.
   static const int maxQueueDepth = 5;
