@@ -34,8 +34,17 @@ class SherpaWakeEngine {
 
   bool _ready = false;
   bool _listening = false;
+  int _chunksReceived = 0;
 
   bool get available => _ready;
+
+  /// True only once the mic stream has actually started delivering audio —
+  /// [available] alone just means the model loaded, not that it's hearing
+  /// anything. A build showing "offline wake word: on" but never detecting
+  /// "Tony" is the signal to check this: if it's false, the stream itself
+  /// never started (permission, device, or `record` plugin issue), not a
+  /// model-sensitivity problem.
+  bool get capturing => _listening;
 
   Future<bool> init(void Function() onWake) async {
     try {
@@ -107,9 +116,12 @@ class SherpaWakeEngine {
         androidConfig: AndroidRecordConfig(audioSource: AndroidAudioSource.voiceRecognition),
       ));
       _listening = true;
+      _chunksReceived = 0;
       _audioSub = stream.listen(_onPcmChunk, onError: (Object e) {
         log.w('SherpaWakeEngine audio stream error: $e');
+        _listening = false;
       });
+      log.i('SherpaWakeEngine: mic stream started');
     } catch (e, s) {
       log.e('SherpaWakeEngine.start failed', e, s);
       _listening = false;
@@ -120,6 +132,11 @@ class SherpaWakeEngine {
     final spotter = _spotter;
     final stream = _stream;
     if (spotter == null || stream == null) return;
+
+    _chunksReceived++;
+    if (_chunksReceived % 50 == 0) {
+      log.d('SherpaWakeEngine: $_chunksReceived audio chunks received so far');
+    }
 
     // PCM16 little-endian bytes -> Float32 normalised to [-1, 1].
     final samples = Float32List(bytes.length ~/ 2);

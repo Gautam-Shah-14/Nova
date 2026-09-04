@@ -67,7 +67,10 @@ class WakeWordService {
   /// True once [start] confirms the offline engine initialised — decides
   /// which backend owns "waiting for Tony" for this session.
   bool _offlineMode = false;
-  bool get usingOfflineWakeWord => _offlineMode;
+  /// True only when the offline engine is both selected AND actually
+  /// receiving mic audio — not just "the model loaded". See
+  /// [SherpaWakeEngine.capturing].
+  bool get usingOfflineWakeWord => _offlineMode && _sherpa.capturing;
 
   Timer? _relisten;
   Timer? _commandTimeout;
