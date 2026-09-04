@@ -180,6 +180,18 @@ class ServiceController extends GetxController {
     }
 
     accessibilityConnected.value = await _bridge.isAccessibilityConnected();
+    if (!accessibilityConnected.value) {
+      // Same pattern as overlay: can't be granted from a dialog, so send the
+      // user straight to the settings screen instead of making them find it.
+      //
+      // Android 13+ note: a sideloaded app's toggle here starts "Restricted"
+      // (greyed out) until the user allows it from App info's overflow menu
+      // ⋮ → "Allow restricted settings". `openAccessibilitySettings()` can't
+      // do that step for them — it's an anti-malware guard Android requires a
+      // real tap for — so if the toggle looks disabled, that's the fix.
+      await _bridge.openAccessibilitySettings();
+      accessibilityConnected.value = await _bridge.isAccessibilityConnected();
+    }
     log.i('perms — mic:${micGranted.value} overlay:${overlayGranted.value} '
         'notif:${notificationsGranted.value} a11y:${accessibilityConnected.value}');
   }
