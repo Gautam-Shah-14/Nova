@@ -81,6 +81,14 @@ class NativeBridge {
   Future<bool> openUrl(String url) async =>
       (await _invoke<bool>('openUrl', {'url': url})) ?? false;
 
+  // ── System controls ────────────────────────────────────────────────────
+  Future<bool> setFlashlight(bool on) async =>
+      (await _invoke<bool>('setFlashlight', {'on': on})) ?? false;
+
+  /// delta > 0 raises, < 0 lowers, 0 toggles mute.
+  Future<bool> adjustVolume(int delta) async =>
+      (await _invoke<bool>('adjustVolume', {'delta': delta})) ?? false;
+
   // ── Contacts / dialer ──────────────────────────────────────────────────
   /// `{name, number}` for the best contact match, or null if not found / no
   /// READ_CONTACTS permission.

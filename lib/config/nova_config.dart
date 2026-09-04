@@ -44,11 +44,13 @@ class NovaConfig {
   static const String userName = '';
 
   /// Wake phrase Nova listens for, and the spoken variants that count as a
-  /// match (SpeechRecognizer mishears short names a lot — "Tony"/"Sony",
-  /// "Nova"/"no ba", etc). All lowercase.
-  static const String wakePhrase = 'Nova';
+  /// match (SpeechRecognizer mishears short names a lot). All lowercase.
+  /// "Tony" is primary — shorter/more distinct than "Nova" for the
+  /// recognizer, and pairs with the Stark-style wake acknowledgement below.
+  static const String wakePhrase = 'Tony';
   static const List<String> wakeAliases = <String>[
-    'nova', 'no va', 'nldova', 'tony', 'toni', 'sony', 'jarvis',
+    'tony', 'toni', 'tonee', 'toney', 'tone e', 'sony',
+    'nova', 'no va', 'nldova', 'jarvis',
   ];
 
   /// Spoken the moment the wake word is heard, before Nova processes the

@@ -34,6 +34,9 @@
     <!-- Meeting capture (Phase 2). -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Flashlight skill. Not required — devices without a flash still install. -->
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
+
     <application
         android:label="Nova"
         android:name="${applicationName}"

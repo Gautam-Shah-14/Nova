@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -99,6 +100,15 @@ class MainActivity : FlutterActivity() {
                 }
                 "listLaunchableApps" -> result.success(launchableApps())
 
+                "setFlashlight" -> {
+                    val on = call.argument<Boolean>("on") ?: false
+                    result.success(setFlashlight(on))
+                }
+                "adjustVolume" -> {
+                    val delta = call.argument<Int>("delta") ?: 0
+                    result.success(adjustVolume(delta))
+                }
+
                 "findContact" -> {
                     val query = call.argument<String>("query")
                     if (query.isNullOrBlank()) {
@@ -152,6 +162,45 @@ class MainActivity : FlutterActivity() {
                 "label" to it.loadLabel(packageManager).toString()
             )
         }.distinctBy { it["package"] }
+    }
+
+    /** Toggles the rear camera's torch. False on any device without a
+     *  flash-equipped camera, or if it's mid-use by the camera app. */
+    private fun setFlashlight(on: Boolean): Boolean {
+        return try {
+            val cm = getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+            val cameraId = cm.cameraIdList.firstOrNull { id ->
+                cm.getCameraCharacteristics(id)
+                    .get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+            } ?: return false
+            cm.setTorchMode(cameraId, on)
+            true
+        } catch (e: Exception) {
+            Log.w("NovaMain", "setFlashlight failed", e)
+            false
+        }
+    }
+
+    /** delta > 0 raises, < 0 lowers, 0 toggles mute. Shows the system volume UI
+     *  so the user sees what changed. */
+    private fun adjustVolume(delta: Int): Boolean {
+        return try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            val direction = when {
+                delta > 0 -> android.media.AudioManager.ADJUST_RAISE
+                delta < 0 -> android.media.AudioManager.ADJUST_LOWER
+                else -> android.media.AudioManager.ADJUST_TOGGLE_MUTE
+            }
+            am.adjustStreamVolume(
+                android.media.AudioManager.STREAM_MUSIC,
+                direction,
+                android.media.AudioManager.FLAG_SHOW_UI
+            )
+            true
+        } catch (e: Exception) {
+            Log.w("NovaMain", "adjustVolume failed", e)
+            false
+        }
     }
 
     /** Best phone-number match for a spoken contact name, via the same

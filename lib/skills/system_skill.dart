@@ -2,22 +2,25 @@ import 'package:battery_plus/battery_plus.dart';
 
 import '../models/parsed_intent.dart';
 import '../models/skill_result.dart';
+import '../services/native_bridge.dart';
 import 'skill.dart';
 
 /// Battery, volume, flashlight — the "trivial, standard APIs" bucket from the
-/// design doc. Phase 1 ships `battery` end to end; volume/flashlight are stubbed
-/// until Phase 2 ("battery/system controls").
+/// design doc.
 class SystemSkill extends Skill {
-  SystemSkill({Battery? battery}) : _battery = battery ?? Battery();
+  SystemSkill({Battery? battery, NativeBridge? bridge})
+      : _battery = battery ?? Battery(),
+        _bridge = bridge ?? NativeBridge.instance;
 
   final Battery _battery;
+  final NativeBridge _bridge;
 
   @override
   String get name => 'system';
 
   @override
   String get usage =>
-      'device controls. args: {} for battery; {"level": 0-100} or {"delta": int} for volume; {"on": bool} for flashlight';
+      'device controls. args: {} for battery; {"delta": int} for volume (>0 up, <0 down, 0 mute); {"on": bool} for flashlight';
 
   @override
   Set<String> get actions => {'battery', 'volume', 'flashlight'};
@@ -37,10 +40,20 @@ class SystemSkill extends Skill {
           return SkillResult.failed("Couldn't read the battery.");
         }
 
-      case 'volume':
       case 'flashlight':
-        // TODO(nova): native handlers (Phase 2 — "battery/system controls").
-        return SkillResult.failed('${intent.action} control isn\'t wired up yet.');
+        final on = intent.args['on'] != false; // default true if unspecified
+        final ok = await _bridge.setFlashlight(on);
+        return ok
+            ? SkillResult.ok(on ? 'Flashlight on.' : 'Flashlight off.')
+            : SkillResult.failed("Couldn't reach the flashlight.");
+
+      case 'volume':
+        final delta = (intent.args['delta'] as num?)?.toInt() ?? 0;
+        final ok = await _bridge.adjustVolume(delta);
+        if (!ok) return SkillResult.failed("Couldn't change the volume.");
+        return SkillResult.ok(
+          delta == 0 ? 'Muted.' : (delta > 0 ? 'Volume up.' : 'Volume down.'),
+        );
 
       default:
         return SkillResult.failed('system can\'t do "${intent.action}".');
