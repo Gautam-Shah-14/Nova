@@ -1,0 +1,61 @@
+name: nova
+description: "Nova — personal on-device AI companion. Android background service, no UI screens."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State + DI. Matches the existing GetX/Hive stack.
+  get: ^4.7.2
+
+  # Local storage for notes, config, the WhatsApp allow-list.
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Runtime permission flow (mic, overlay, notifications).
+  permission_handler: ^11.3.1
+
+  # Model/asset paths on device.
+  path_provider: ^2.1.5
+  path: ^1.9.0
+
+  # Phase 1 starter skill — battery status, end to end.
+  battery_plus: ^6.2.1
+
+  # On-device voice I/O, fully offline:
+  #  - flutter_tts   -> Android's TextToSpeech engine (audio out)
+  #  - vosk_flutter_2 -> Kaldi/Vosk offline STT + continuous wake-word spotting
+  #                     ("Nova"). One ~40MB model, bundled as an asset.
+  flutter_tts: ^4.2.0
+  vosk_flutter_2: ^1.0.5
+
+  # On-device LLM — llama.cpp (FFI, runs in an isolate) with
+  # Qwen2.5-3B-Instruct GGUF Q4_K_M. ~1.9GB model, downloaded on first run
+  # (see model_downloader.dart).
+  llama_sdk: ^0.0.5
+
+  # Streamed model download with progress.
+  dio: ^5.7.0
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    # Optional custom status icon. If this file is absent at build time Nova
+    # falls back to a generated colored dot — see status_controller.dart.
+    - assets/icon/
+    # Bundled Vosk offline STT + wake-word model (~40MB zip, unpacked on first
+    # run). The LLM model is NOT bundled — it downloads on first run.
+    - assets/models/

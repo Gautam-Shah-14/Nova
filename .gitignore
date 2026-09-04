@@ -1,0 +1,71 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/coverage/
+# Flutter's /build/ plus Gradle's android/build/, android/app/build/, etc.
+**/build/
+# Keep pubspec.lock tracked (app, not a package) — do NOT ignore it.
+
+# Build outputs / release artifacts
+*.apk
+*.aab
+*.apks
+*.ipa
+
+# ── Model files ──────────────────────────────────────────────────────────
+# The Vosk offline speech model (assets/models/vosk-model-small-en-us-0.15.zip,
+# ~40MB) IS committed so `git pull && flutter pub get && flutter run` just works.
+# The on-device LLM weight (~1.9GB) is downloaded by the app at first run and
+# must never be committed:
+*.gguf
+*.task
+
+# Debug / scratch
+crash.txt
+*.crash
+/scratch/
+/tmp/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Widget Preview related
+.widget_preview/

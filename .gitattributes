@@ -1,0 +1,22 @@
+# Normalise line endings so the repo is stable across Windows / macOS / Linux.
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF.
+*.bat        text eol=crlf
+*.ps1        text eol=crlf
+*.cmd        text eol=crlf
+
+# Binary assets — never touch.
+*.zip        binary
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.ico        binary
+*.ttf        binary
+*.otf        binary
+*.gguf       binary
+*.so         binary
+*.jar        binary
+*.keystore   binary
+*.jks        binary

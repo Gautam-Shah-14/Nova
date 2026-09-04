@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Generic driver config. Nova reads the on-screen node tree of whatever app
+    is in the foreground and performs taps / text input on it. Deliberately
+    broad (typeAllMask, all packages) because the same driver backs Gmail,
+    WhatsApp and "any other installed app" rather than one config per target.
+
+    canRetrieveWindowContent + flagRetrieveInteractiveWindows are what let the
+    driver see editable fields and buttons; flagRequestFilterKeyEvents is off
+    because Nova never needs to intercept the keyboard.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:canPerformGestures="true"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/nova_accessibility_description"
+    android:notificationTimeout="100" />

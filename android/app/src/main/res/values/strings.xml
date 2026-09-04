@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nova_accessibility_description">Lets Nova read and operate other apps (Gmail, WhatsApp, and any installed app) on your behalf. Send actions are always confirmed first. Personal, sideloaded use only.</string>
+</resources>
