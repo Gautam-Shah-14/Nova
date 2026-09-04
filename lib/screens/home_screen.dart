@@ -214,6 +214,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   _row('Voice output (TTS)',
                       _service.bootstrapped.value && _tts.ready),
                   _row('Speech recognition', _service.speechRecognitionReady.value),
+                  _row('Offline wake word (no audio interruption)',
+                      _service.usingOfflineWakeWord.value),
                   _row('Wake listening', _service.listening.value),
                   _row('Accessibility service',
                       _service.accessibilityConnected.value),

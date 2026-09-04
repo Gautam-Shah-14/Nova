@@ -39,6 +39,16 @@ dependencies:
   flutter_tts: ^4.2.0
   speech_to_text: ^7.0.0
 
+  # Continuous, always-free wake-word spotting for "Tony" that never touches
+  # audio focus — it decodes raw mic samples directly (via `record`'s PCM
+  # stream) rather than opening an Android "recognition session", so it
+  # doesn't duck/pause other apps' audio while it waits. A tiny (~5MB)
+  # bundled int8 model does the spotting; speech_to_text still captures the
+  # command afterward. Graceful no-op fallback to speech_to_text-only if init
+  # fails for any reason — see sherpa_wake_engine.dart.
+  sherpa_onnx: ^1.13.7
+  record: ^7.1.1
+
   # On-device LLM — llama.cpp (FFI, runs in an isolate) with
   # Qwen2.5-3B-Instruct GGUF Q4_K_M. ~1.9GB model, downloaded on first run
   # (see model_downloader.dart).
@@ -61,3 +71,5 @@ flutter:
     # Optional custom status icon. If this file is absent at build time Nova
     # falls back to a generated colored dot — see status_controller.dart.
     - assets/icon/
+    # Bundled "Tony" keyword-spotting model (~5MB) — see sherpa_wake_engine.dart.
+    - assets/sherpa_kws/

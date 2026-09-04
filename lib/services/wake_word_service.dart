@@ -12,37 +12,46 @@ import '../models/nova_status.dart';
 import '../models/wake_event.dart';
 import '../utils/logger.dart';
 import 'native_bridge.dart';
+import 'sherpa_wake_engine.dart';
 import 'tts_service.dart';
 
-/// Wake phrase + command capture via Android's `SpeechRecognizer`
-/// (`speech_to_text`). Uses on-device recognition automatically on phones with
-/// the offline language pack installed; falls back to Google's recognizer
-/// otherwise. The native foreground service just keeps the process (and its
-/// mic-typed FGS) alive; this class runs the listen loop.
+/// Wake phrase + command capture. Two backends for the "wait for Tony" part:
 ///
-/// Flow: final result -> contains a wake alias? -> speak the acknowledgement,
-/// then either the words after the alias are the command, or the next
-/// utterance is -> emit a [WakeEvent]. Recognition is suspended while Nova is
-/// `working` (or speaking) so it doesn't transcribe its own TTS.
+/// - **[SherpaWakeEngine]** — free, offline, bundled model. Decodes raw mic
+///   samples directly and never opens an Android recognition session, so it
+///   never grabs audio focus and doesn't duck/pause other apps' audio while
+///   it's just waiting. Used automatically whenever it initialises OK.
+/// - **`speech_to_text`** (Android's `SpeechRecognizer`) — the fallback,
+///   always available, no setup, but ducks other audio on every session.
 ///
-/// `SpeechRecognizer` sessions are short-lived and end on their own, and on a
-/// quiet mic they can end almost immediately — restarting one instantly on
-/// every such end is what produces the rapid on/off "listening" chime you'd
-/// otherwise hear. Two things tame that: [_minListenGap] is a hard floor
-/// under how often a session can (re)start at all, and [_backoffSteps] grows
-/// the relisten delay the longer nothing's been heard, resetting the moment
-/// real speech comes back. A [_watchdog] timer separately force-restarts
-/// listening if it ever finds the recognizer idle with nothing scheduled
-/// while Nova should be armed, so a missed relisten can't leave Nova silently
-/// deaf until the app is manually restarted.
+/// Either way, once "Tony" is heard, `speech_to_text` captures the actual
+/// command (a short, expected interruption — same as any voice assistant
+/// actively listening for what you want). Recognition is suspended while Nova
+/// is `working` (or speaking) so it doesn't transcribe its own TTS.
+///
+/// In the `speech_to_text`-only fallback, sessions are short-lived and end on
+/// their own — on a quiet mic they can end almost immediately, and restarting
+/// one instantly on every such end is what produces rapid on/off "listening"
+/// chimes. Two things tame that: [_minListenGap] is a hard floor under how
+/// often a session can (re)start at all, and [_backoffSteps] grows the
+/// relisten delay the longer nothing's been heard, resetting the moment real
+/// speech comes back. A [_watchdog] timer separately force-restarts listening
+/// if it ever finds the recognizer idle with nothing scheduled while Nova
+/// should be armed.
 class WakeWordService {
-  WakeWordService({required this.status, required this.tts, NativeBridge? bridge})
-      : _bridge = bridge ?? NativeBridge.instance;
+  WakeWordService({
+    required this.status,
+    required this.tts,
+    NativeBridge? bridge,
+    SherpaWakeEngine? sherpa,
+  })  : _bridge = bridge ?? NativeBridge.instance,
+        _sherpa = sherpa ?? SherpaWakeEngine();
 
   final StatusController status;
   final TtsService tts;
   final NativeBridge _bridge;
   final SpeechToText _speech = SpeechToText();
+  final SherpaWakeEngine _sherpa;
 
   final _hits = StreamController<WakeEvent>.broadcast();
   Stream<WakeEvent> get onWake => _hits.stream;
@@ -54,6 +63,12 @@ class WakeWordService {
   bool _paused = false;
   bool _expectingCommand = false;
   bool _acknowledging = false;
+
+  /// True once [start] confirms the offline engine initialised — decides
+  /// which backend owns "waiting for Tony" for this session.
+  bool _offlineMode = false;
+  bool get usingOfflineWakeWord => _offlineMode;
+
   Timer? _relisten;
   Timer? _commandTimeout;
 
@@ -86,6 +101,9 @@ class WakeWordService {
       log.w('startListening (FGS) failed: $e');
     }
 
+    // speech_to_text is always initialised — the offline engine only
+    // replaces who waits for "Tony"; speech_to_text still captures the
+    // command either way.
     try {
       _available = await _speech.initialize(
         onError: _onError,
@@ -96,8 +114,11 @@ class WakeWordService {
       log.e('speech.initialize threw', e, s);
       _available = false;
     }
-    if (!_available) {
-      log.e('speech recognition unavailable on this device');
+
+    _offlineMode = await _sherpa.init(_onOfflineWake);
+
+    if (!_available && !_offlineMode) {
+      log.e('no wake engine available (offline KWS failed, SpeechRecognizer unavailable)');
       return;
     }
     _running = true;
@@ -113,20 +134,24 @@ class WakeWordService {
       }
     });
 
-    _watchdog = Timer.periodic(const Duration(seconds: 5), (_) {
-      final relistenPending = _relisten?.isActive ?? false;
-      if (_running &&
-          !_paused &&
-          !_acknowledging &&
-          !_speech.isListening &&
-          !relistenPending) {
-        log.w('watchdog: recognizer was idle with nothing scheduled — restarting');
-        _listen();
-      }
-    });
-
-    _listen();
-    log.i('WakeWordService armed — say "${NovaConfig.wakePhrase}"');
+    if (_offlineMode) {
+      await _sherpa.start();
+      log.i('WakeWordService armed via offline KWS — say "${NovaConfig.wakePhrase}"');
+    } else {
+      _watchdog = Timer.periodic(const Duration(seconds: 5), (_) {
+        final relistenPending = _relisten?.isActive ?? false;
+        if (_running &&
+            !_paused &&
+            !_acknowledging &&
+            !_speech.isListening &&
+            !relistenPending) {
+          log.w('watchdog: recognizer was idle with nothing scheduled — restarting');
+          _listen();
+        }
+      });
+      _listen();
+      log.i('WakeWordService armed via SpeechRecognizer — say "${NovaConfig.wakePhrase}"');
+    }
   }
 
   Future<void> stop() async {
@@ -137,6 +162,9 @@ class WakeWordService {
     _watchdog = null;
     _statusWorker?.dispose();
     _statusWorker = null;
+    if (_offlineMode) {
+      await _sherpa.stop();
+    }
     try {
       await _speech.stop();
     } catch (_) {}
@@ -145,10 +173,13 @@ class WakeWordService {
     } catch (_) {}
   }
 
+  void _onOfflineWake() => unawaited(_onWakeDetected(''));
+
   /// Debug hook — behaves as if the wake phrase was heard with no trailing
   /// command, so the next spoken phrase is taken as the command.
   Future<void> simulate() async {
     HapticFeedback.mediumImpact();
+    if (_offlineMode) await _sherpa.stop();
     _expectingCommand = true;
     _armCommandTimeout();
     _listen();
@@ -256,15 +287,21 @@ class WakeWordService {
     _scheduleRelisten();
   }
 
-  /// Wake word confirmed: acknowledge out loud (mic paused while it speaks so
-  /// it doesn't hear itself), then capture the command.
+  /// Wake word confirmed (either engine): acknowledge out loud (mic paused
+  /// while it speaks so it doesn't hear itself), then capture the command via
+  /// speech_to_text. In offline-KWS mode, [tail] is always empty — the
+  /// spotter only signals "woken", it doesn't transcribe.
   Future<void> _onWakeDetected(String tail) async {
     HapticFeedback.mediumImpact();
     _acknowledging = true;
     _relisten?.cancel();
-    try {
-      _speech.cancel();
-    } catch (_) {}
+    if (_offlineMode) {
+      await _sherpa.stop(); // release the mic before speech_to_text needs it
+    } else {
+      try {
+        _speech.cancel();
+      } catch (_) {}
+    }
 
     try {
       await tts.speak(NovaConfig.wakeAcknowledgement);
@@ -293,6 +330,10 @@ class WakeWordService {
       if (_expectingCommand) {
         _expectingCommand = false;
         log.i('no command after wake — back to idle');
+        try {
+          _speech.cancel();
+        } catch (_) {}
+        if (_offlineMode) unawaited(_sherpa.start());
       }
     });
   }
@@ -301,17 +342,26 @@ class WakeWordService {
     if (_paused) return;
     _paused = true;
     _relisten?.cancel();
-    _speech.cancel();
+    if (_offlineMode) {
+      unawaited(_sherpa.stop());
+    } else {
+      _speech.cancel();
+    }
   }
 
   void _resume() {
     if (!_paused) return;
     _paused = false;
-    _scheduleRelisten(const Duration(milliseconds: 300));
+    if (_offlineMode) {
+      unawaited(_sherpa.start());
+    } else {
+      _scheduleRelisten(const Duration(milliseconds: 300));
+    }
   }
 
   Future<void> dispose() async {
     await stop();
+    await _sherpa.dispose();
     await _hits.close();
   }
 }

@@ -36,6 +36,7 @@ class ServiceController extends GetxController {
   final RxBool notificationsGranted = false.obs;
   final RxBool accessibilityConnected = false.obs;
   final RxBool speechRecognitionReady = false.obs;
+  final RxBool usingOfflineWakeWord = false.obs;
   final RxBool listening = false.obs;
   final RxBool bootstrapped = false.obs;
 
@@ -85,6 +86,7 @@ class ServiceController extends GetxController {
     try {
       await wakeWord.start();
       speechRecognitionReady.value = wakeWord.speechAvailable;
+      usingOfflineWakeWord.value = wakeWord.usingOfflineWakeWord;
       listening.value = wakeWord.isRunning;
       if (wakeWord.speechAvailable) {
         await statusController.available();
@@ -111,6 +113,7 @@ class ServiceController extends GetxController {
       accessibilityConnected.value = await _bridge.isAccessibilityConnected();
     } catch (_) {}
     speechRecognitionReady.value = wakeWord.speechAvailable;
+    usingOfflineWakeWord.value = wakeWord.usingOfflineWakeWord;
     listening.value = wakeWord.isRunning;
   }
 
@@ -156,6 +159,7 @@ class ServiceController extends GetxController {
     if (!micGranted.value) return;
     await wakeWord.start();
     speechRecognitionReady.value = wakeWord.speechAvailable;
+    usingOfflineWakeWord.value = wakeWord.usingOfflineWakeWord;
     listening.value = wakeWord.isRunning;
     if (statusController.value == NovaStatus.sleeping) {
       await statusController.available();
