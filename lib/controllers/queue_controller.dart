@@ -11,6 +11,7 @@ import '../services/llm_service.dart';
 import '../services/reasoning_engine.dart';
 import '../services/tts_service.dart';
 import '../utils/logger.dart';
+import '../utils/personality.dart';
 import 'status_controller.dart';
 
 /// The FIFO queue + single worker loop from the design doc. Each wake-word hit
@@ -129,10 +130,13 @@ class QueueController extends GetxController {
     }
   }
 
-  /// Speak a line and remember it for the debug screen.
+  /// Speak a line and remember it for the debug screen. Runs skill output
+  /// through [Personality] first — clarifying questions/confirmations are
+  /// already hand-authored and pass through unchanged.
   Future<void> _say(String line) async {
-    lastResponse.value = line;
-    await tts.speak(line);
+    final styled = Personality.stylize(line);
+    lastResponse.value = styled;
+    await tts.speak(styled);
   }
 
   bool get _confirmationPending =>

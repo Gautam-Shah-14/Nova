@@ -4,6 +4,7 @@ import 'package:nova/models/parsed_intent.dart';
 import 'package:nova/services/llm_service.dart';
 import 'package:nova/services/reasoning_engine.dart';
 import 'package:nova/skills/skill_registry.dart';
+import 'package:nova/utils/personality.dart';
 
 ParsedIntent _intent(String skill, String action, [Map<String, dynamic> args = const {}]) =>
     ParsedIntent(skill: skill, action: action, args: args);
@@ -68,6 +69,30 @@ void main() {
     test('routes "what\'s the date" to clock.date', () async {
       final intent = await llm.parse("what's the date");
       expect(intent.qualifiedName, 'clock.date');
+    });
+
+    test('routes "call <name> from contact" to phone.call, stripping filler', () async {
+      final intent = await llm.parse('call Dhruv Brahmbhatt PU from contact');
+      expect(intent.qualifiedName, 'phone.call');
+      expect(intent.args['query'], 'dhruv brahmbhatt pu');
+    });
+
+    test('routes a spoken phone number to phone.call', () async {
+      final intent = await llm.parse('dial 555 0100');
+      expect(intent.qualifiedName, 'phone.call');
+      expect(intent.args['query'], '555 0100');
+    });
+  });
+
+  group('Personality', () {
+    test('stylizes a recognised "Opening X." line without changing the app name', () {
+      final styled = Personality.stylize('Opening Instagram.');
+      expect(styled, contains('Instagram'));
+    });
+
+    test('passes unrecognised lines through verbatim', () {
+      const clarifying = 'What should I say to Alex?';
+      expect(Personality.stylize(clarifying), clarifying);
     });
   });
 

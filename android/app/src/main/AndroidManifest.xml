@@ -16,6 +16,11 @@
     <!-- On-device wake word + STT. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- "Call <contact>" — look up a number by name. Dialing itself goes
+         through ACTION_DIAL (opens the dialer, user taps call), so no
+         CALL_PHONE permission is needed. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
     <!-- Floating status dot rendered over other apps. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 

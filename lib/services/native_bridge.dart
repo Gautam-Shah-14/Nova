@@ -81,6 +81,18 @@ class NativeBridge {
   Future<bool> openUrl(String url) async =>
       (await _invoke<bool>('openUrl', {'url': url})) ?? false;
 
+  // ── Contacts / dialer ──────────────────────────────────────────────────
+  /// `{name, number}` for the best contact match, or null if not found / no
+  /// READ_CONTACTS permission.
+  Future<Map<String, String>?> findContact(String query) async {
+    final raw = await _invoke<Map>('findContact', {'query': query});
+    return raw?.map((k, v) => MapEntry(k.toString(), v.toString()));
+  }
+
+  /// Opens the dialer pre-filled with [number] — the user still taps call.
+  Future<bool> dialNumber(String number) async =>
+      (await _invoke<bool>('dialNumber', {'number': number})) ?? false;
+
   // ── Device info ────────────────────────────────────────────────────────
   Future<int> deviceRamMb() async => (await _invoke<int>('deviceRamMb')) ?? 0;
 

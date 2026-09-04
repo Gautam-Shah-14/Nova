@@ -99,6 +99,28 @@ class MainActivity : FlutterActivity() {
                 }
                 "listLaunchableApps" -> result.success(launchableApps())
 
+                "findContact" -> {
+                    val query = call.argument<String>("query")
+                    if (query.isNullOrBlank()) {
+                        result.error("bad_args", "query required", null)
+                    } else {
+                        result.success(findContact(query))
+                    }
+                }
+                "dialNumber" -> {
+                    val number = call.argument<String>("number")
+                    if (number.isNullOrBlank()) {
+                        result.error("bad_args", "number required", null)
+                    } else {
+                        runCatching {
+                            startActivity(
+                                Intent(Intent.ACTION_DIAL, Uri.parse("tel:${Uri.encode(number)}"))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }.fold({ result.success(true) }, { result.success(false) })
+                    }
+                }
+
                 "openUrl" -> {
                     val url = call.argument<String>("url")
                     if (url.isNullOrBlank()) {
@@ -130,6 +152,33 @@ class MainActivity : FlutterActivity() {
                 "label" to it.loadLabel(packageManager).toString()
             )
         }.distinctBy { it["package"] }
+    }
+
+    /** Best phone-number match for a spoken contact name, via the same
+     *  autocomplete index Android's own dialer/contacts UI uses. Null if
+     *  READ_CONTACTS isn't granted or nothing matches. */
+    private fun findContact(query: String): Map<String, String>? {
+        if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            return null
+        }
+        val uri = Uri.withAppendedPath(
+            android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_FILTER_URI,
+            Uri.encode(query)
+        )
+        val projection = arrayOf(
+            android.provider.ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER
+        )
+        contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val name = cursor.getString(0) ?: query
+                val number = cursor.getString(1) ?: return null
+                return mapOf("name" to name, "number" to number)
+            }
+        }
+        return null
     }
 
     /** Total device RAM in MB — drives primary vs fallback LLM selection. */

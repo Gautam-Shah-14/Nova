@@ -4,6 +4,7 @@ import 'app_control_skill.dart';
 import 'app_launcher_skill.dart';
 import 'clock_skill.dart';
 import 'notes_skill.dart';
+import 'phone_skill.dart';
 import 'skill.dart';
 import 'system_skill.dart';
 import 'whatsapp_skill.dart';
@@ -18,6 +19,7 @@ class SkillRegistry {
               AppLauncherSkill(),
               ClockSkill(),
               NotesSkill(),
+              PhoneSkill(),
               AppControlSkill(),
               WhatsAppSkill(),
             ];

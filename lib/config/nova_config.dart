@@ -39,6 +39,10 @@ class NovaConfig {
   /// How long a pending confirmation stays open for the follow-up wake.
   static const Duration confirmationWindow = Duration(seconds: 20);
 
+  /// Set this to have Nova address you by name occasionally (see
+  /// `Personality`). Empty = never uses a name.
+  static const String userName = '';
+
   /// Wake phrase Nova listens for, and the spoken variants that count as a
   /// match (SpeechRecognizer mishears short names a lot — "Tony"/"Sony",
   /// "Nova"/"no ba", etc). All lowercase.

@@ -197,13 +197,15 @@ class LlmService {
       return _ask('What should I say to ${waName.group(1)!.trim()}?');
     }
 
-    final call = RegExp(r'\b(call|dial|phone)\s+(.+)$').firstMatch(t);
+    final call = RegExp(r'\b(?:call|dial|phone)\s+(.+)$').firstMatch(t);
     if (call != null) {
+      // Strip trailing filler like "... from contact(s)".
+      final who = call.group(1)!.trim().replaceFirst(RegExp(r'\s+from\s+contacts?$'), '');
       return ParsedIntent(
-        skill: 'app_launcher',
-        action: 'open',
-        args: {'query': 'phone'},
-        rationale: 'open dialer for "${call.group(2)!.trim()}"',
+        skill: 'phone',
+        action: 'call',
+        args: {'query': who},
+        rationale: 'call "$who"',
       );
     }
 

@@ -165,6 +165,9 @@ class ServiceController extends GetxController {
       notificationsGranted.value = true;
     }
 
+    // For "call <contact>" — looking a name up before dialing.
+    await Permission.contacts.request();
+
     overlayGranted.value = await _bridge.canDrawOverlays();
     if (!overlayGranted.value) {
       // Can't be granted from a dialog — send the user to Settings once.
