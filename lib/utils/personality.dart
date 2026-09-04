@@ -34,6 +34,29 @@ class Personality {
     final time = RegExp(r"^It's (\d{1,2}:\d{2} (?:AM|PM))\.$").firstMatch(plain);
     if (time != null) return _pick(['${time.group(1)}.', 'It\'s ${time.group(1)} — time flies.']);
 
+    final calling = RegExp(r'^Calling (.+)\.$').firstMatch(plain);
+    if (calling != null) {
+      final who = calling.group(1)!;
+      return _withName(_pick(['Calling $who.', 'Ringing $who up.', 'Patching you through to $who.']));
+    }
+    final dialing = RegExp(r'^Dialing (.+)\.$').firstMatch(plain);
+    if (dialing != null) return _pick(['Dialing.', 'Connecting you now.']);
+
+    final flashlight = RegExp(r'^Flashlight (on|off)\.$').firstMatch(plain);
+    if (flashlight != null) {
+      final on = flashlight.group(1) == 'on';
+      return _pick(on
+          ? ['Flashlight on.', "Let there be light.", 'Lighting the way.']
+          : ['Flashlight off.', 'Lights out.']);
+    }
+
+    if (plain == 'Volume up.') return _pick(['Volume up.', 'Turning it up.']);
+    if (plain == 'Volume down.') return _pick(['Volume down.', 'Easing off.']);
+    if (plain == 'Muted.') return _pick(['Muted.', 'Silenced.']);
+
+    final sentTo = RegExp(r'^Sent to (.+)\.$').firstMatch(plain);
+    if (sentTo != null) return _pick(['Sent to ${sentTo.group(1)}.', 'Message away.']);
+
     if (plain.startsWith("Couldn't") || plain.startsWith('Something went wrong')) {
       return _pick([plain, '$plain Not my finest moment.', '$plain — try again?']);
     }

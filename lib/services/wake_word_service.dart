@@ -25,11 +25,16 @@ import 'tts_service.dart';
 /// utterance is -> emit a [WakeEvent]. Recognition is suspended while Nova is
 /// `working` (or speaking) so it doesn't transcribe its own TTS.
 ///
-/// `SpeechRecognizer` sessions are short-lived and end on their own — a
-/// [_watchdog] timer force-restarts listening if it ever finds the recognizer
-/// idle while Nova should be armed, so a missed relisten (a dropped
-/// callback, a status transition that didn't fire [_resume]) can't leave
-/// Nova silently deaf until the app is manually restarted.
+/// `SpeechRecognizer` sessions are short-lived and end on their own, and on a
+/// quiet mic they can end almost immediately — restarting one instantly on
+/// every such end is what produces the rapid on/off "listening" chime you'd
+/// otherwise hear. Two things tame that: [_minListenGap] is a hard floor
+/// under how often a session can (re)start at all, and [_backoffSteps] grows
+/// the relisten delay the longer nothing's been heard, resetting the moment
+/// real speech comes back. A [_watchdog] timer separately force-restarts
+/// listening if it ever finds the recognizer idle with nothing scheduled
+/// while Nova should be armed, so a missed relisten can't leave Nova silently
+/// deaf until the app is manually restarted.
 class WakeWordService {
   WakeWordService({required this.status, required this.tts, NativeBridge? bridge})
       : _bridge = bridge ?? NativeBridge.instance;
@@ -51,6 +56,24 @@ class WakeWordService {
   bool _acknowledging = false;
   Timer? _relisten;
   Timer? _commandTimeout;
+
+  /// Hard floor between session starts — the actual fix for the audible
+  /// on/off churn: whatever asked for a relisten, [_listen] itself refuses to
+  /// restart faster than this, no matter how many callers ask.
+  static const _minListenGap = Duration(milliseconds: 1200);
+  DateTime? _lastListenStart;
+
+  /// Grows the relisten delay while nothing is being heard (silence, a room
+  /// with no one talking) instead of retrying at a fixed fast cadence — the
+  /// backoff steps, in order. Resets the moment real speech comes back.
+  static const _backoffSteps = <Duration>[
+    Duration(milliseconds: 500),
+    Duration(milliseconds: 1000),
+    Duration(milliseconds: 2000),
+    Duration(seconds: 3),
+  ];
+  int _quietStreak = 0;
+  Duration _backoffDelay() => _backoffSteps[_quietStreak.clamp(0, _backoffSteps.length - 1)];
 
   bool get speechAvailable => _available;
   bool get isRunning => _running;
@@ -79,6 +102,8 @@ class WakeWordService {
     }
     _running = true;
     _paused = false;
+    _quietStreak = 0;
+    _lastListenStart = null;
 
     _statusWorker = ever<NovaStatus>(status.status, (s) {
       if (s == NovaStatus.working) {
@@ -88,9 +113,14 @@ class WakeWordService {
       }
     });
 
-    _watchdog = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (_running && !_paused && !_acknowledging && !_speech.isListening) {
-        log.w('watchdog: recognizer was idle — restarting');
+    _watchdog = Timer.periodic(const Duration(seconds: 5), (_) {
+      final relistenPending = _relisten?.isActive ?? false;
+      if (_running &&
+          !_paused &&
+          !_acknowledging &&
+          !_speech.isListening &&
+          !relistenPending) {
+        log.w('watchdog: recognizer was idle with nothing scheduled — restarting');
         _listen();
       }
     });
@@ -128,6 +158,21 @@ class WakeWordService {
   void _listen() {
     if (!_running || _paused || _acknowledging) return;
     if (_speech.isListening) return;
+
+    // Hard floor: never restart a session faster than _minListenGap after the
+    // last one started, regardless of what asked for this relisten. This is
+    // what actually stops the rapid on/off churn — without it, a chain of
+    // quick errors/empty results can retrigger listen() many times a second.
+    final last = _lastListenStart;
+    if (last != null) {
+      final elapsed = DateTime.now().difference(last);
+      if (elapsed < _minListenGap) {
+        _scheduleRelisten(_minListenGap - elapsed);
+        return;
+      }
+    }
+
+    _lastListenStart = DateTime.now();
     _speech
         .listen(
           onResult: _onResult,
@@ -135,21 +180,29 @@ class WakeWordService {
             partialResults: false,
             cancelOnError: true,
             listenMode: ListenMode.dictation,
-            listenFor: const Duration(seconds: 10),
+            listenFor: const Duration(seconds: 12),
             pauseFor: const Duration(seconds: 3),
             localeId: 'en_US',
           ),
         )
         .catchError((Object e) {
       log.w('listen() threw: $e');
-      _scheduleRelisten(const Duration(milliseconds: 800));
+      _noteQuiet();
+      _scheduleRelisten();
     });
   }
 
-  void _scheduleRelisten([Duration delay = const Duration(milliseconds: 400)]) {
+  /// Pass an explicit [delay] to override the backoff (e.g. the short,
+  /// deliberate relisten right after the wake acknowledgement). Otherwise the
+  /// backoff step for however long it's been quiet is used — [_listen] still
+  /// enforces [_minListenGap] underneath regardless of what's asked for here.
+  void _scheduleRelisten([Duration? delay]) {
     _relisten?.cancel();
-    _relisten = Timer(delay, _listen);
+    _relisten = Timer(delay ?? _backoffDelay(), _listen);
   }
+
+  void _noteQuiet() => _quietStreak = (_quietStreak + 1).clamp(0, _backoffSteps.length - 1);
+  void _noteHeardSpeech() => _quietStreak = 0;
 
   void _onStatus(String s) {
     if ((s == 'done' || s == 'notListening') &&
@@ -161,9 +214,11 @@ class WakeWordService {
   }
 
   void _onError(SpeechRecognitionError e) {
-    // no_match / speech_timeout are normal in a wake loop — just go again.
+    // no_match / speech_timeout are normal in a wake loop — just go again,
+    // progressively slower the longer it's been since anyone said anything.
     if (_running && !_paused && !_acknowledging) {
-      _scheduleRelisten(const Duration(milliseconds: 600));
+      _noteQuiet();
+      _scheduleRelisten();
     }
   }
 
@@ -171,9 +226,12 @@ class WakeWordService {
     if (!r.finalResult) return;
     final text = r.recognizedWords.trim();
     if (text.isEmpty) {
+      _noteQuiet();
       _scheduleRelisten();
       return;
     }
+    // Real speech came back — drop the backoff and stay responsive.
+    _noteHeardSpeech();
     final lower = text.toLowerCase();
     log.d('heard: "$text"');
 
