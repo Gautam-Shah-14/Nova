@@ -71,6 +71,16 @@ void main() {
       expect(intent.qualifiedName, 'clock.date');
     });
 
+    test('routes "flash on" and "flash off" to system.flashlight', () async {
+      final on = await llm.parse('flash on');
+      expect(on.qualifiedName, 'system.flashlight');
+      expect(on.args['on'], isTrue);
+
+      final off = await llm.parse('flash off');
+      expect(off.qualifiedName, 'system.flashlight');
+      expect(off.args['on'], isFalse);
+    });
+
     test('routes "call <name> from contact" to phone.call, stripping filler', () async {
       final intent = await llm.parse('call Dhruv Brahmbhatt PU from contact');
       expect(intent.qualifiedName, 'phone.call');

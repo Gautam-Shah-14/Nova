@@ -162,7 +162,7 @@ class LlmService {
     if (t.contains('battery') || t.contains('charge') || t.contains('power level')) {
       return ParsedIntent(skill: 'system', action: 'battery', rationale: 'battery check');
     }
-    if (t.contains('flashlight') || t.contains('torch')) {
+    if (t.contains('flashlight') || t.contains('torch') || t.contains('flash')) {
       return ParsedIntent(
         skill: 'system',
         action: 'flashlight',
