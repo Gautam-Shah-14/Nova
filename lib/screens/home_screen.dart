@@ -6,11 +6,10 @@ import '../controllers/service_controller.dart';
 import '../services/llm_service.dart';
 import '../services/model_downloader.dart';
 import '../services/tts_service.dart';
-import '../services/vosk_service.dart';
 
 /// Status console. Nova is meant to be screenless, but this is how you see
-/// permissions, whether Vosk/LLM loaded, the model download, and drive a
-/// command by hand.
+/// permissions, whether speech recognition/the LLM loaded, the model
+/// download, and drive a command by hand.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -23,7 +22,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _service = Get.find<ServiceController>();
   final _queue = Get.find<QueueController>();
   final _tts = Get.find<TtsService>();
-  final _vosk = Get.find<VoskService>();
   final _llm = Get.find<LlmService>();
 
   bool _startingListen = false;
@@ -90,18 +88,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _downloadCard(),
           const SizedBox(height: 16),
 
-          FilledButton.icon(
-            onPressed: _startingListen ? null : _startListening,
-            icon: _startingListen
-                ? const SizedBox(
-                    width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.hearing),
-            label: Text(_startingListen ? 'Starting…' : 'Start listening (Vosk)'),
-          ),
+          Obx(() => FilledButton.icon(
+                onPressed: _startingListen || _service.listening.value
+                    ? null
+                    : _startListening,
+                icon: _startingListen
+                    ? const SizedBox(
+                        width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(_service.listening.value ? Icons.hearing : Icons.hearing_disabled),
+                label: Text(_startingListen
+                    ? 'Starting…'
+                    : _service.listening.value
+                        ? 'Listening'
+                        : 'Start listening'),
+              )),
           const SizedBox(height: 4),
           Text(
-            'Offline wake word / speech. Experimental — if the app dies when you '
-            'tap this, Vosk is the problem and everything below still works.',
+            'Say "Nova, <command>" once this is on. Restart it here if the OS '
+            'ever reclaims the mic.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
@@ -182,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   _row('Display over apps', _service.overlayGranted.value),
                   _row('Voice output (TTS)',
                       _service.bootstrapped.value && _tts.ready),
-                  _row('Offline speech (Vosk)', _vosk.ready),
+                  _row('Speech recognition', _service.speechRecognitionReady.value),
                   _row('Wake listening', _service.listening.value),
                   _row('Accessibility service',
                       _service.accessibilityConnected.value),

@@ -27,12 +27,17 @@ dependencies:
   # Phase 1 starter skill — battery status, end to end.
   battery_plus: ^6.2.1
 
-  # On-device voice I/O, fully offline:
-  #  - flutter_tts   -> Android's TextToSpeech engine (audio out)
-  #  - vosk_flutter_2 -> Kaldi/Vosk offline STT + continuous wake-word spotting
-  #                     ("Nova"). One ~40MB model, bundled as an asset.
+  # Voice I/O:
+  #  - flutter_tts    -> Android's TextToSpeech engine (audio out)
+  #  - speech_to_text -> Android's SpeechRecognizer (wake phrase + commands).
+  #    Uses on-device recognition automatically on phones with the offline
+  #    language pack installed, else falls back to Google's recognizer.
+  #    Swapped in after vosk_flutter_2 (JNA-based) proved unstable — crashed
+  #    natively on-device even after packaging/permission fixes. speech_to_text
+  #    is a plain platform-channel wrapper around a system API, not an FFI/JNI
+  #    plugin, so it doesn't carry that class of bug.
   flutter_tts: ^4.2.0
-  vosk_flutter_2: ^1.0.5
+  speech_to_text: ^7.0.0
 
   # On-device LLM — llama.cpp (FFI, runs in an isolate) with
   # Qwen2.5-3B-Instruct GGUF Q4_K_M. ~1.9GB model, downloaded on first run
@@ -56,6 +61,3 @@ flutter:
     # Optional custom status icon. If this file is absent at build time Nova
     # falls back to a generated colored dot — see status_controller.dart.
     - assets/icon/
-    # Bundled Vosk offline STT + wake-word model (~40MB zip, unpacked on first
-    # run). The LLM model is NOT bundled — it downloads on first run.
-    - assets/models/

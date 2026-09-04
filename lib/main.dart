@@ -16,7 +16,8 @@ import 'utils/logger.dart';
 
 /// Nova's real surface is the notification + overlay dot. The screen is a
 /// status console for bring-up. Startup is deliberately fault-tolerant: any one
-/// subsystem (TTS, Vosk, LLM) can fail without taking the app down.
+/// subsystem (TTS, speech recognition, LLM) can fail without taking the app
+/// down.
 Future<void> main() async {
   // Never let an async/platform error hard-crash the process.
   FlutterError.onError = (d) => log.e('FlutterError', d.exception, d.stack);
@@ -50,15 +51,11 @@ Future<void> _start() async {
   await _guard(
       'permissions', () => Get.find<ServiceController>().requestPermissions());
 
-  // 3. Bring up the foreground service + event wiring (no mic yet).
+  // 3. Bring up the foreground service + event wiring, then start listening.
   await _guard('arm', () => Get.find<ServiceController>().arm());
 
   // 4. LLM downloads/loads in the background; keyword parser covers the gap.
   unawaited(_guard('llm.init', () => Get.find<LlmService>().init()));
-
-  // NOTE: Vosk (offline wake word / STT) is NOT started here. It has been
-  // crashing on-device (JNA native load). Start it from the status screen's
-  // "Start listening" button so a failure is isolated and visible.
 }
 
 Future<void> _guard(String label, Future<void> Function() step) async {

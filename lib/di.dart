@@ -9,7 +9,6 @@ import 'services/model_downloader.dart';
 import 'services/model_store.dart';
 import 'services/reasoning_engine.dart';
 import 'services/tts_service.dart';
-import 'services/vosk_service.dart';
 import 'services/wake_word_service.dart';
 import 'skills/skill_registry.dart';
 
@@ -21,7 +20,6 @@ void installDependencies() {
   final registry = Get.put(SkillRegistry(), permanent: true);
 
   final tts = Get.put(TtsService(), permanent: true);
-  final vosk = Get.put(VoskService(), permanent: true);
   final llm = Get.put(
     LlmService(registry: registry, models: models, downloader: downloader),
     permanent: true,
@@ -31,7 +29,7 @@ void installDependencies() {
 
   final status = Get.put(StatusController(), permanent: true);
   final wakeWord = Get.put(
-    WakeWordService(status: status, vosk: vosk),
+    WakeWordService(status: status),
     permanent: true,
   );
   final queue = Get.put(

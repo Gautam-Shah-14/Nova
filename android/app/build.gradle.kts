@@ -18,9 +18,7 @@ android {
         applicationId = "com.tokenburners.nova"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        // Vosk (offline STT/wake word) requires 30; background mic + FGS types
-        // effectively need 30+ anyway. Personal sideload target is Android 11+.
-        minSdk = maxOf(30, flutter.minSdkVersion)
+        minSdk = flutter.minSdkVersion
 
         // Personal build: arm64 only (every phone from ~2018 on). Drops the
         // 32-bit + x86 copies of libvosk/libllama. Build with --split-per-abi

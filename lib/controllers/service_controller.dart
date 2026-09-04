@@ -55,31 +55,33 @@ class ServiceController extends GetxController {
     await _requestPermissions();
   }
 
-  /// Step 2 — foreground service + event wiring. Does NOT touch the mic / Vosk;
-  /// that's opt-in via [enableListening] so a native crash there is isolated.
+  /// Step 2 — foreground service + event wiring, then starts listening if the
+  /// mic is granted. [enableListening] stays available as a manual retry (the
+  /// notification/screen can lose the recognizer if the OS reclaims the mic).
   Future<void> arm() async {
     _wakeSub ??= wakeWord.onWake.listen((event) {
       if (event.hasCommand) queue.enqueue(text: event.command!);
     });
-    // FGS is just a notification + wake lock here (no mic — NATIVE_CAPTURE is
-    // off), so its Talk/Pause/Test buttons are available from the start.
     try {
-      await _bridge.startListening();
+      await _bridge.startListening(); // FGS: notification + wake lock
     } catch (_) {}
     if (overlayGranted.value) {
       try {
         await _bridge.showOverlay();
       } catch (_) {}
     }
-    await statusController.sleeping();
+    await enableListening();
     bootstrapped.value = true;
-    log.i('Nova armed (listening not started)');
+    log.i('Nova armed — listening=${listening.value}');
   }
 
-  /// Opt-in: bring up Vosk + the mic. Returns null on success, an error string
-  /// on failure. If this crashes the process, we've learnt Vosk is the culprit.
+  /// Starts (or restarts) the speech recognizer. Returns null on success, an
+  /// error string on failure.
   Future<String?> enableListening() async {
-    if (!micGranted.value) return 'Microphone permission not granted.';
+    if (!micGranted.value) {
+      await statusController.sleeping();
+      return 'Microphone permission not granted.';
+    }
     try {
       await wakeWord.start();
       speechRecognitionReady.value = wakeWord.speechAvailable;
@@ -88,11 +90,13 @@ class ServiceController extends GetxController {
         await statusController.available();
         return null;
       }
-      return 'Offline speech engine (Vosk) did not initialise.';
+      await statusController.sleeping();
+      return 'Speech recognition did not initialise on this device.';
     } catch (e, s) {
       log.e('enableListening failed', e, s);
       speechRecognitionReady.value = false;
       listening.value = false;
+      await statusController.sleeping();
       return 'Listening failed: $e';
     }
   }
