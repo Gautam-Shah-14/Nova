@@ -94,6 +94,22 @@ void main() {
       const clarifying = 'What should I say to Alex?';
       expect(Personality.stylize(clarifying), clarifying);
     });
+
+    test('roasts a repeated request of the same kind', () {
+      Personality.stylize('Opening Instagram.'); // first — no repeat streak yet
+      final second = Personality.stylize('Opening Instagram.');
+      // Roast is probabilistic (60%), but over many tries at least one must land.
+      final anyRoasted = List.generate(40, (_) {
+            Personality.stylize('Opening Instagram.');
+            return Personality.stylize('Opening Instagram.');
+          }).any((s) =>
+              s.contains('Heard you') ||
+              s.contains('literally just') ||
+              s.contains("I'm good, not deaf") ||
+              s.contains('Persistent'));
+      expect(second, contains('Instagram')); // still a valid app-open line
+      expect(anyRoasted, isTrue);
+    });
   });
 
   group('ReasoningEngine', () {
